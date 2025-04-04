@@ -1,4 +1,4 @@
-// app/api/auth/[...nextauth]/route.ts
+// src/app/api/auth/[...nextauth]/route.ts
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
@@ -12,7 +12,7 @@ export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: {
     strategy: "jwt",
-    maxAge: 15 * 60, // 15 minutes (short-lived access token)
+    maxAge: 30 * 24 * 60 * 60, // 30 days - increasing for better persistence
   },
   providers: [
     CredentialsProvider({
@@ -75,6 +75,8 @@ export const authOptions: NextAuthOptions = {
         // Add custom claims to token
         token.id = user.id;
         token.tier = user.tier;
+        token.email = user.email;
+        token.name = user.name;
         token.jti = crypto.randomUUID(); // Add unique token ID for revocation
       }
       
@@ -84,6 +86,8 @@ export const authOptions: NextAuthOptions = {
       // Add claims to the session
       session.user.id = token.id;
       session.user.tier = token.tier;
+      session.user.email = token.email;
+      session.user.name = token.name;
       
       return session;
     },
@@ -92,6 +96,18 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
     error: "/login?error=true",
   },
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
+  debug: process.env.NODE_ENV === "development",
 };
 
 const handler = NextAuth(authOptions);

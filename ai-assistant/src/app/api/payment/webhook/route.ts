@@ -1,189 +1,166 @@
-// app/api/llm/stream/route.ts
-import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+// src/app/api/payment/webhook/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { redis } from "@/lib/redis";
-import { z } from "zod";
-import { OpenAI } from "openai";
-import { validateRequest } from "@/lib/validate";
-import { sanitizeInput, sanitizeOutput } from "@/lib/sanitize";
+import { headers } from "next/headers";
+import Stripe from "stripe";
 
-// Initialize OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+// Initialize Stripe with the secret key
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+  apiVersion: "2025-03-31.basil", // Updated API version for 2025
 });
 
+// Stripe webhook secret from the dashboard
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET as string;
+
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  
-  if (!session?.user?.id) {
-    return new Response(
-      JSON.stringify({ error: "Unauthorized" }), 
-      { status: 401 }
-    );
-  }
-  
-  // Validate CSRF token
-  const csrfToken = request.headers.get("x-csrf-token");
-  const cookieStore = request.cookies;
-  const cookieToken = cookieStore.get("csrf_token")?.value;
-  
-  if (!csrfToken || !cookieToken || csrfToken !== cookieToken) {
-    return new Response(
-      JSON.stringify({ error: "Invalid CSRF token" }), 
-      { status: 403 }
-    );
-  }
-  
-  // Validate request body
-  const schema = z.object({
-    conversationId: z.string().uuid(),
-    query: z.string().min(1).max(10000),
-  });
-  
-  const result = await validateRequest(request, schema);
-  
-  if (!result.success) {
-    return new Response(
-      JSON.stringify({ error: "Invalid request", details: result.error }), 
-      { status: 400 }
-    );
-  }
-  
-  const { conversationId, query } = result.data;
-  
-  // Sanitize input
-  const sanitizedQuery = sanitizeInput(query);
-  
   try {
-    // Check if conversation belongs to user
-    const conversation = await prisma.conversation.findFirst({
-      where: {
-        id: conversationId,
-        userId: session.user.id,
-        isDeleted: false,
-      },
-    });
+    // 1. Get the raw request body
+    const body = await request.text();
     
-    if (!conversation) {
-      return new Response(
-        JSON.stringify({ error: "Conversation not found" }), 
-        { status: 404 }
+    // 2. Get the signature from headers
+    const headersList = headers();
+    const signature = headersList.get("stripe-signature") as string;
+    
+    if (!signature) {
+      return NextResponse.json(
+        { error: "Missing Stripe signature" },
+        { status: 400 }
       );
     }
     
-    // Apply rate limiting
-    const rateLimit = session.user.tier === "PRO" ? 5 : 1;
-    const rateLimitKey = `rate:${session.user.id}:llm`;
-    const currentRequests = await redis.incr(rateLimitKey);
+    // 3. Verify webhook signature
+    let event: Stripe.Event;
     
-    if (currentRequests === 1) {
-      // Set expiry for rate limit key (1 second)
-      await redis.expire(rateLimitKey, 1);
-    }
-    
-    if (currentRequests > rateLimit) {
-      return new Response(
-        JSON.stringify({ error: "Rate limit exceeded" }), 
-        { status: 429 }
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    } catch (err: any) {
+      console.error(`Webhook signature verification failed: ${err.message}`);
+      return NextResponse.json(
+        { error: "Invalid signature" },
+        { status: 400 }
       );
     }
     
-    // Store user message
-    await prisma.message.create({
-      data: {
-        conversationId,
-        userId: session.user.id,
-        role: "user",
-        content: sanitizedQuery,
-      },
-    });
-    
-    // Get conversation history
-    const messages = await prisma.message.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: "asc" },
-      select: {
-        role: true,
-        content: true,
-      },
-    });
-    
-    // Format messages for OpenAI
-    const formattedMessages = messages.map(msg => ({
-      role: msg.role,
-      content: msg.content,
-    }));
-    
-    // Add system message
-    formattedMessages.unshift({
-      role: "system",
-      content: `You are a helpful assistant. Current date: ${new Date().toISOString().split('T')[0]}.`,
-    });
-    
-    // Determine model based on user tier
-    const model = session.user.tier === "PRO" ? "gpt-4o" : "gpt-3.5-turbo";
-    
-    // Create stream response
-    const stream = await openai.chat.completions.create({
-      model,
-      messages: formattedMessages,
-      temperature: 0.7,
-      max_tokens: 2000,
-      stream: true,
-    });
-    
-    // Set up response streaming
-    const encoder = new TextEncoder();
-    let fullResponse = "";
-    
-    const responseStream = new ReadableStream({
-      async start(controller) {
-        for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content || "";
-          if (content) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
-            fullResponse += content;
+    // 4. Handle specific webhook events
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        
+        // Update user tier to PRO
+        if (session.client_reference_id) {
+          await prisma.user.update({
+            where: { id: session.client_reference_id },
+            data: {
+              tier: "PRO",
+              stripeCustomerId: session.customer as string,
+            },
+          });
+          
+          console.log(`User ${session.client_reference_id} upgraded to PRO tier`);
+        }
+        break;
+      }
+      
+      case "customer.subscription.created": {
+        const subscription = event.data.object as Stripe.Subscription;
+        
+        // Find user by customer ID
+        if (subscription.customer) {
+          const user = await prisma.user.findFirst({
+            where: { stripeCustomerId: subscription.customer as string },
+          });
+          
+          if (user) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { tier: "PRO" },
+            });
+            
+            console.log(`User ${user.id} subscription created, tier set to PRO`);
           }
         }
+        break;
+      }
+      
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as Stripe.Subscription;
         
-        // Send the 'done' event
-        controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+        // Update user tier based on subscription status
+        if (subscription.customer) {
+          const user = await prisma.user.findFirst({
+            where: { stripeCustomerId: subscription.customer as string },
+          });
+          
+          if (user) {
+            // Determine tier based on subscription status
+            const tier = subscription.status === "active" ? "PRO" : "FREE";
+            
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { tier },
+            });
+            
+            console.log(`User ${user.id} subscription updated, tier set to ${tier}`);
+          }
+        }
+        break;
+      }
+      
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as Stripe.Subscription;
         
-        // Store the complete response
-        const sanitizedResponse = sanitizeOutput(fullResponse);
-        await prisma.message.create({
-          data: {
-            conversationId,
-            userId: session.user.id,
-            role: "assistant",
-            content: sanitizedResponse,
-          },
-        });
+        // Downgrade user to FREE tier
+        if (subscription.customer) {
+          const user = await prisma.user.findFirst({
+            where: { stripeCustomerId: subscription.customer as string },
+          });
+          
+          if (user) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { tier: "FREE" },
+            });
+            
+            console.log(`User ${user.id} subscription deleted, tier downgraded to FREE`);
+          }
+        }
+        break;
+      }
+      
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
         
-        // Update conversation last activity
-        await prisma.conversation.update({
-          where: { id: conversationId },
-          data: { updatedAt: new Date() },
-        });
-        
-        controller.close();
-      },
-    });
+        // Handle failed payment (optional: notify user)
+        if (invoice.customer) {
+          const user = await prisma.user.findFirst({
+            where: { stripeCustomerId: invoice.customer as string },
+          });
+          
+          if (user) {
+            console.log(`Payment failed for user ${user.id}, invoice: ${invoice.id}`);
+            
+            // Here you could trigger an email notification
+            // This is left as an implementation detail
+          }
+        }
+        break;
+      }
+    }
     
-    return new Response(responseStream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-      },
-    });
-  } catch (error) {
-    console.error("Error streaming response:", error);
-    return new Response(
-      JSON.stringify({ error: "Failed to stream response" }), 
+    // 5. Return success response
+    return NextResponse.json({ success: true, received: true });
+  } catch (error: any) {
+    console.error("Error handling webhook:", error);
+    return NextResponse.json(
+      { error: "Webhook handler failed", message: error.message },
       { status: 500 }
     );
   }
 }
+
+// Disable body parsing for this route (needed for Stripe webhooks)
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
