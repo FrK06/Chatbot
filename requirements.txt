@@ -8,10 +8,6 @@ pytest>=7.3.1
 pytest-asyncio>=0.21.0
 requests>=2.31.0
 
-# Microservices monitoring (optional)
-prometheus-client>=0.16.0
-grafana-client>=2.2.0
-
 # Utility tools
 black>=23.3.0    # Code formatting
 flake8>=6.0.0    # Linting
