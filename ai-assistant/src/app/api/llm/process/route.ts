@@ -65,6 +65,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
     }
     
+    // Apply rate limiting
+    const rateLimit = session.user.tier === "PRO" ? 5 : 1;
+    const rateLimitKey = `rate:${session.user.id}:llm`;
+    const currentRequests = await redis.incr(rateLimitKey);
+    
+    if (currentRequests === 1) {
+      // Set expiry for rate limit key (1 second)
+      await redis.expire(rateLimitKey, 1);
+    }
+    
+    if (currentRequests > rateLimit) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded" },
+        { status: 429 }
+      );
+    }
+    
     // Get conversation history
     const messages = await prisma.message.findMany({
       where: { conversationId },
@@ -75,19 +92,19 @@ export async function POST(request: NextRequest) {
       },
     });
     
-    // Format messages for OpenAI
+    // Format messages for OpenAI with proper typing
     const formattedMessages = messages.map(msg => ({
-      role: msg.role,
+      role: msg.role as "user" | "assistant" | "system",
       content: msg.content,
     }));
     
-    // Add system message
+    // Add system message with correct type
     formattedMessages.unshift({
       role: "system",
       content: `You are a helpful assistant. Current date: ${new Date().toISOString().split('T')[0]}.`,
     });
     
-    // Add current query
+    // Add current query with correct type
     formattedMessages.push({
       role: "user",
       content: sanitizedQuery,
@@ -102,7 +119,7 @@ export async function POST(request: NextRequest) {
       const reasoningMessages = [
         ...formattedMessages,
         {
-          role: "system",
+          role: "system" as const,
           content: "Before responding, think through this step by step.",
         },
       ];

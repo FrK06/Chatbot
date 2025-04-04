@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
-// cookies' is declared but its value is never read.ts(6133)(alias) function cookies(): Promise<ReadonlyRequestCookies>import cookies
-import { cookies } from "next/headers"; 
 
 export async function GET() {
   const token = randomBytes(32).toString("hex");
