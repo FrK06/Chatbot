@@ -6,11 +6,18 @@ const publicPaths = [
   "/",
   "/login",
   "/direct-login",
-  "/simple-test",
+  "/forgot-password",
+  "/signup",
   "/api/direct-auth",
-  "/api/simple-auth",
-  "/api/debug-session",
+  // NextAuth paths - IMPORTANT: ensure all of these are included
+  "/api/auth",
+  "/api/auth/signin",
+  "/api/auth/signout",
+  "/api/auth/session",
+  "/api/auth/providers",
+  "/api/auth/callback",
   "/api/auth/csrf",
+  "/api/auth/error",
   "/api/health"
 ];
 
@@ -31,7 +38,7 @@ export async function middleware(request: NextRequest) {
   
   if (!token) {
     // No token found, redirect to login
-    return NextResponse.redirect(new URL('/simple-test', request.url));
+    return NextResponse.redirect(new URL('/direct-login', request.url));
   }
   
   // Let the request continue - we'll let the API routes validate the token
@@ -39,5 +46,14 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    /*
+     * Match all paths except:
+     * 1. /api/auth/* (NextAuth.js paths)
+     * 2. /_next/* (Next.js internals)
+     * 3. /static/* (static files)
+     * 4. .*\..*$ (files with extensions)
+     */
+    '/((?!_next/|static/|.*\\..*$).*)',
+  ],
 };

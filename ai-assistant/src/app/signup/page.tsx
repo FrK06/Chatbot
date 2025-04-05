@@ -1,67 +1,48 @@
-// src/app/direct-login/page.tsx
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 
-export default function DirectLoginPage() {
+export default function SignupPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("test@example.com");
-  const [password, setPassword] = useState("password123");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setIsLoading(true);
     setError("");
-    setStatus("Submitting login...");
+
+    // Basic validation
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      setIsLoading(false);
+      return;
+    }
 
     try {
-      const response = await fetch("/api/direct-auth", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
+      // This is a placeholder - implement actual signup functionality
+      // For now, just simulate a successful registration
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      if (!response.ok) {
-        setError(data.error || "Failed to log in");
-        setStatus(`Login failed: ${data.error || "Unknown error"}`);
-      } else {
-        // Successfully logged in
-        setStatus("Login successful! Redirecting...");
-        
-        // Give time for cookies to be set
-        setTimeout(() => {
-          router.push("/chat");
-        }, 1000);
-      }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      setError(errorMessage);
-      setStatus(`Error: ${errorMessage}`);
-      console.error("Login error:", error);
+      // Redirect to login page after successful signup
+      router.push("/direct-login?registered=true");
+    } catch (error) {
+      setError("Registration failed. Please try again.");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  };
-
-  const handleGoogleLogin = () => {
-    // This will be connected to the NextAuth Google provider
-    window.location.href = "/api/auth/signin/google";
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900">
       <div className="w-full max-w-md bg-gray-800 rounded-lg shadow-lg p-8">
-        <h1 className="text-2xl font-bold text-white mb-6">Direct Login</h1>
+        <h1 className="text-2xl font-bold text-white mb-6">Create an Account</h1>
         
         {error && (
           <div className="mb-4 p-3 bg-red-500 text-white rounded">
@@ -69,42 +50,53 @@ export default function DirectLoginPage() {
           </div>
         )}
         
-        <p className="text-gray-300 mb-4 text-sm">
-          Only login via email, Google, or +86 phone number login is supported in your region.
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="block w-full rounded-md bg-gray-700 border-gray-600 text-white p-4"
+              placeholder="Full name"
+              required
+            />
+          </div>
+          
           <div>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white p-4"
-              placeholder="Phone number / email address"
+              className="block w-full rounded-md bg-gray-700 border-gray-600 text-white p-4"
+              placeholder="Email address"
               required
             />
           </div>
           
-          <div className="relative">
+          <div>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white p-4"
+              className="block w-full rounded-md bg-gray-700 border-gray-600 text-white p-4"
               placeholder="Password"
               required
             />
-            <button
-              type="button"
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-              aria-label="Show password"
-            >
-              👁️
-            </button>
+          </div>
+          
+          <div>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="block w-full rounded-md bg-gray-700 border-gray-600 text-white p-4"
+              placeholder="Confirm password"
+              required
+            />
           </div>
           
           <p className="text-sm text-gray-400">
-            By signing up or logging in, you consent to AI Assistant's{" "}
+            By signing up, you consent to AI Assistant's{" "}
             <Link href="/terms" className="text-blue-400 hover:underline">Terms of Use</Link>
             {" "}and{" "}
             <Link href="/privacy" className="text-blue-400 hover:underline">Privacy Policy</Link>.
@@ -112,20 +104,23 @@ export default function DirectLoginPage() {
           
           <button
             type="submit"
-            disabled={loading}
+            disabled={isLoading}
             className="w-full bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700 disabled:bg-blue-400"
           >
-            {loading ? "Logging in..." : "Log in"}
+            {isLoading ? "Creating account..." : "Sign up"}
           </button>
         </form>
         
-        <div className="mt-4 flex justify-between">
-          <Link href="/forgot-password" className="text-blue-400 text-sm hover:underline">
-            Forgot password?
-          </Link>
-          <Link href="/signup" className="text-blue-400 text-sm hover:underline">
-            Sign up
-          </Link>
+        <div className="mt-6 text-center">
+          <p className="text-gray-300">
+            Already have an account?{" "}
+            <Link 
+              href="/direct-login" 
+              className="text-blue-400 hover:underline"
+            >
+              Log in
+            </Link>
+          </p>
         </div>
         
         <div className="relative mt-6">
@@ -138,7 +133,7 @@ export default function DirectLoginPage() {
         </div>
         
         <button
-          onClick={handleGoogleLogin}
+          onClick={() => window.location.href = "/api/auth/signin/google"}
           className="mt-6 w-full bg-gray-700 text-white p-3 rounded-md hover:bg-gray-600 flex items-center justify-center"
         >
           <svg viewBox="0 0 24 24" width="24" height="24" className="mr-2">
@@ -159,14 +154,8 @@ export default function DirectLoginPage() {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
             />
           </svg>
-          Log in with Google
+          Sign up with Google
         </button>
-        
-        {status && (
-          <div className="mt-4 p-3 bg-gray-900 text-gray-300 rounded text-xs">
-            {status}
-          </div>
-        )}
       </div>
     </div>
   );

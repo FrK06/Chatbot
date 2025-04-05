@@ -6,9 +6,9 @@ import ChatInterfaceDirect from "./ChatInterfaceDirect";
 export default async function ChatPage() {
   const user = await getCurrentUser();
   
-  // If no user, redirect to login
+  // If no user, redirect to direct login
   if (!user) {
-    redirect("/simple-test?next=/chat");
+    redirect("/direct-login?callbackUrl=/chat");
   }
 
   // Render the client component chat interface

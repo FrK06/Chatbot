@@ -55,30 +55,6 @@ export default function ChatInterfaceDirect({ user }: { user: User }) {
     fetchCsrfToken();
   }, []);
 
-  // Check auth status - debugging helper
-  useEffect(() => {
-    const checkAuthStatus = async () => {
-      try {
-        const debugResponse = await fetch("/api/debug-session", {
-          credentials: 'include',
-        });
-        
-        const debugData = await debugResponse.json();
-        console.log("Auth status:", debugData);
-        
-        if (!debugData.hasToken || !debugData.validToken) {
-          setStatus("Authentication issue detected. You may need to log in again.");
-        }
-      } catch (error) {
-        console.error("Error checking auth status:", error);
-      }
-    };
-
-    if (csrfToken) {
-      checkAuthStatus();
-    }
-  }, [csrfToken]);
-
   // Fetch conversations
   useEffect(() => {
     const fetchConversations = async () => {
