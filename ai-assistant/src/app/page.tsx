@@ -36,12 +36,13 @@ export default async function Home() {
                 </Link>
               </>
             ) : (
-              <Link 
-                href="/direct-login" 
-                className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
-              >
-                Login
-              </Link>
+            // src/app/page.tsx - Update the login button
+            <Link 
+              href="/direct-login" 
+              className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+            >
+              Login
+            </Link>   
             )}
           </div>
         </div>

@@ -66,8 +66,9 @@ export async function POST(request: NextRequest) {
       .setExpirationTime("24h")
       .sign(secret);
     
-    // 6. Set the session cookie
-    cookies().set("session-token", token, {
+    // 6. Set the session cookie - FIX: Add await here
+    const cookieStore = await cookies();
+    cookieStore.set("session-token", token, {
       httpOnly: true,
       path: "/",
       secure: process.env.NODE_ENV === "production",
