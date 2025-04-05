@@ -1,5 +1,6 @@
 "use client";
 
+// Modified: src/app/chat/ChatInterfaceDirect.tsx
 import { useState, useEffect, FormEvent } from "react";
 import Link from "next/link";
 
@@ -38,8 +39,11 @@ export default function ChatInterfaceDirect({ user }: { user: User }) {
   useEffect(() => {
     const fetchCsrfToken = async () => {
       try {
-        const response = await fetch("/api/auth/csrf");
+        const response = await fetch("/api/auth/csrf", {
+          credentials: 'include' // Ensure cookies are sent and received
+        });
         const data = await response.json();
+        console.log("CSRF token received:", data.token ? data.token.substring(0, 10) + "..." : "none");
         setCsrfToken(data.token);
         setStatus("CSRF token obtained");
       } catch (error) {
@@ -51,7 +55,31 @@ export default function ChatInterfaceDirect({ user }: { user: User }) {
     fetchCsrfToken();
   }, []);
 
-  // Fetch conversations with credentials included
+  // Check auth status - debugging helper
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      try {
+        const debugResponse = await fetch("/api/debug-session", {
+          credentials: 'include',
+        });
+        
+        const debugData = await debugResponse.json();
+        console.log("Auth status:", debugData);
+        
+        if (!debugData.hasToken || !debugData.validToken) {
+          setStatus("Authentication issue detected. You may need to log in again.");
+        }
+      } catch (error) {
+        console.error("Error checking auth status:", error);
+      }
+    };
+
+    if (csrfToken) {
+      checkAuthStatus();
+    }
+  }, [csrfToken]);
+
+  // Fetch conversations
   useEffect(() => {
     const fetchConversations = async () => {
       if (!csrfToken) return;
@@ -60,31 +88,29 @@ export default function ChatInterfaceDirect({ user }: { user: User }) {
         setIsLoading(true);
         setStatus("Fetching conversations...");
         
-        // First check session status 
-        const debugResponse = await fetch("/api/debug-session", {
-          credentials: 'include',  // Important!
-        });
-        
-        const debugData = await debugResponse.json();
-        setStatus(`Auth debug: ${JSON.stringify(debugData)}`);
-        
-        // Proceed with conversations API call
+        // Use consistent headers and credentials for fetch
         const response = await fetch("/api/conversations", {
-          credentials: 'include',  // Important!
+          credentials: 'include',
           headers: {
+            'Content-Type': 'application/json',
             'x-csrf-token': csrfToken
           }
         });
         
         if (response.ok) {
           const data = await response.json();
+          console.log("Conversations loaded:", data.conversations?.length || 0);
           setConversations(data.conversations || []);
           setStatus("Conversations loaded");
         } else {
-          console.error("Failed to fetch conversations:", response.statusText);
+          let errorText = await response.text();
+          console.error("Failed to fetch conversations:", response.status, errorText);
+          
           if (response.status === 401) {
             setError("Authentication failed. Please go back to login page and try again.");
             setStatus("Authentication error");
+          } else {
+            setError(`Error ${response.status}: ${errorText}`);
           }
         }
       } catch (error) {
@@ -127,16 +153,19 @@ export default function ChatInterfaceDirect({ user }: { user: User }) {
 
       if (response.ok) {
         const newConversation: Conversation = await response.json();
+        console.log("New conversation created:", newConversation.id);
         setConversations([newConversation, ...conversations]);
         setCurrentConversation(newConversation);
         setMessages([]);
         setStatus("New conversation created");
       } else {
-        console.error("Failed to create conversation:", response.statusText);
+        const errorText = await response.text();
+        console.error("Failed to create conversation:", response.status, errorText);
+        
         if (response.status === 401) {
           setError("Your session has expired. Please return to login page.");
         } else {
-          setError("Failed to create conversation. Please try again.");
+          setError(`Failed to create conversation: ${errorText}`);
         }
       }
     } catch (error) {
@@ -173,7 +202,10 @@ export default function ChatInterfaceDirect({ user }: { user: User }) {
       const messageToBeSent = inputMessage;
       setInputMessage("");
       
-      // Send to API
+      // Debug the CSRF token and cookie
+      console.log("Message submission - CSRF token:", csrfToken);
+      
+      // Send to API with consistent headers and credentials
       const response = await fetch(`/api/conversations/${currentConversation.id}/messages`, {
         method: "POST",
         headers: {
@@ -185,6 +217,8 @@ export default function ChatInterfaceDirect({ user }: { user: User }) {
           content: messageToBeSent,
         }),
       });
+      
+      console.log("Message submission response status:", response.status);
       
       if (response.ok) {
         // Process with LLM
@@ -216,13 +250,15 @@ export default function ChatInterfaceDirect({ user }: { user: User }) {
           
           setMessages((prevMessages) => [...prevMessages, aiMessage]);
         } else {
-          console.error("LLM process failed:", llmResponse.statusText);
-          setError("Failed to get AI response. Please try again.");
+          const errorText = await llmResponse.text();
+          console.error("LLM process failed:", llmResponse.status, errorText);
+          setError(`Failed to get AI response: ${errorText}`);
           setStatus("AI processing error");
         }
       } else {
-        console.error("Failed to send message:", response.statusText);
-        setError("Failed to send message. Please try again.");
+        const errorText = await response.text();
+        console.error("Failed to send message:", response.status, errorText);
+        setError(`Failed to send message: ${errorText}`);
         setStatus("Message sending error");
       }
     } catch (error) {
@@ -245,7 +281,8 @@ export default function ChatInterfaceDirect({ user }: { user: User }) {
       const response = await fetch(`/api/conversations/${conversation.id}/messages`, {
         credentials: 'include',
         headers: {
-          'x-csrf-token': csrfToken
+          'x-csrf-token': csrfToken,
+          'Content-Type': 'application/json'
         }
       });
       
@@ -254,8 +291,9 @@ export default function ChatInterfaceDirect({ user }: { user: User }) {
         setMessages(data.messages || []);
         setStatus("Messages loaded");
       } else {
-        console.error("Failed to fetch messages:", response.statusText);
-        setError("Failed to load messages. Please try again.");
+        const errorText = await response.text();
+        console.error("Failed to fetch messages:", response.status, errorText);
+        setError(`Failed to load messages: ${errorText}`);
         setStatus("Message loading error");
       }
     } catch (error) {
