@@ -1,21 +1,11 @@
 // src/app/page.tsx
-"use client";
-
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { cookies } from "next/headers";
+import { getCurrentUser } from "@/lib/auth-utils";
 
-export default function Home() {
-  const router = useRouter();
-  const { data: session, status } = useSession();
-
-  const handleStartChatting = () => {
-    if (status === "authenticated") {
-      router.push("/chat");
-    } else {
-      router.push("/login?callbackUrl=/chat");
-    }
-  };
+export default async function Home() {
+  const user = await getCurrentUser();
+  const isAuthenticated = !!user;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -24,24 +14,30 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">AI Assistant</h1>
           <div className="flex space-x-4">
-            {status === "authenticated" ? (
+            {isAuthenticated ? (
               <>
                 <Link 
-                  href="/chat" 
+                  href="/dashboard" 
                   className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+                >
+                  Dashboard
+                </Link>
+                <Link 
+                  href="/chat" 
+                  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
                 >
                   Chat
                 </Link>
-                <button
-                  onClick={() => router.push("/api/auth/signout")}
+                <Link
+                  href="/api/logout"
                   className="bg-gray-100 text-gray-800 px-4 py-2 rounded hover:bg-gray-200"
                 >
                   Logout
-                </button>
+                </Link>
               </>
             ) : (
               <Link 
-                href="/login" 
+                href="/direct-login" 
                 className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
               >
                 Login
@@ -62,12 +58,12 @@ export default function Home() {
             Ask questions, get summaries, and have natural conversations with your AI companion.
           </p>
           <div className="mt-12">
-            <button
-              onClick={handleStartChatting}
+            <Link
+              href={isAuthenticated ? "/chat" : "/direct-login"}
               className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-md text-lg font-medium hover:bg-indigo-700"
             >
-              Start Chatting
-            </button>
+              {isAuthenticated ? "Start Chatting" : "Login to Start"}
+            </Link>
           </div>
         </div>
       </main>
