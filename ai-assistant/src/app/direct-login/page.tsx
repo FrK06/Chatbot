@@ -1,18 +1,51 @@
-// src/app/direct-login/page.tsx
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 
 export default function DirectLoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get('callbackUrl') || '/chat';
+  const errorType = searchParams.get('error');
+  const isRegistered = searchParams.get('registered') === 'true';
+  const isReset = searchParams.get('reset') === 'success';
+
   const [email, setEmail] = useState("test@example.com");
   const [password, setPassword] = useState("password123");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
+
+  // Set error message based on URL parameter
+  useEffect(() => {
+    if (errorType) {
+      let errorMessage = "";
+      switch (errorType) {
+        case "google":
+          errorMessage = "Google authentication failed. This might be due to incorrect configuration or permission issues.";
+          break;
+        case "CredentialsSignin":
+          errorMessage = "Invalid email or password.";
+          break;
+        case "SessionRequired":
+          errorMessage = "You need to be logged in to access that page.";
+          break;
+        default:
+          errorMessage = `Authentication error: ${errorType}`;
+      }
+      setError(errorMessage);
+    }
+
+    if (isRegistered) {
+      setStatus("Account created successfully! Please log in.");
+    }
+
+    if (isReset) {
+      setStatus("Your password has been reset successfully!");
+    }
+  }, [errorType, isRegistered, isReset]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +73,7 @@ export default function DirectLoginPage() {
         
         // Give time for cookies to be set
         setTimeout(() => {
-          router.push("/chat");
+          router.push(callbackUrl);
         }, 1000);
       }
     } catch (error: unknown) {
@@ -55,7 +88,7 @@ export default function DirectLoginPage() {
 
   const handleGoogleLogin = () => {
     // This will be connected to the NextAuth Google provider
-    window.location.href = "/api/auth/signin/google";
+    window.location.href = `/api/auth/signin/google?callbackUrl=${encodeURIComponent(callbackUrl)}`;
   };
 
   return (
@@ -66,6 +99,12 @@ export default function DirectLoginPage() {
         {error && (
           <div className="mb-4 p-3 bg-red-500 text-white rounded">
             {error}
+          </div>
+        )}
+
+        {status && !error && (
+          <div className="mb-4 p-3 bg-green-500 text-white rounded">
+            {status}
           </div>
         )}
         
@@ -162,9 +201,14 @@ export default function DirectLoginPage() {
           Log in with Google
         </button>
         
-        {status && (
-          <div className="mt-4 p-3 bg-gray-900 text-gray-300 rounded text-xs">
-            {status}
+        {errorType === 'google' && (
+          <div className="mt-3 text-xs text-yellow-300">
+            <p>Google login may fail if:</p>
+            <ul className="list-disc pl-5 mt-1">
+              <li>The redirect URI in Google Cloud Console doesn't match your current URL</li>
+              <li>You're using a different port (e.g., 3001 instead of 3000)</li>
+              <li>Your NEXTAUTH_URL in .env doesn't match your current URL</li>
+            </ul>
           </div>
         )}
       </div>

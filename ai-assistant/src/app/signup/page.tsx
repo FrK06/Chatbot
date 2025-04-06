@@ -1,39 +1,117 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { getPasswordStrength } from "@/lib/validation";
 
 export default function SignupPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/direct-login";
+  
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [status, setStatus] = useState("");
+  const [passwordStrength, setPasswordStrength] = useState({ score: 0, feedback: "" });
+  const [passwordVisible, setPasswordVisible] = useState(false);
+
+  // Update password strength when password changes
+  useEffect(() => {
+    if (password) {
+      setPasswordStrength(getPasswordStrength(password));
+    } else {
+      setPasswordStrength({ score: 0, feedback: "" });
+    }
+  }, [password]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
+    setStatus("Creating your account...");
 
     // Basic validation
     if (password !== confirmPassword) {
       setError("Passwords do not match");
+      setStatus("");
+      setIsLoading(false);
+      return;
+    }
+
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      setStatus("");
+      setIsLoading(false);
+      return;
+    }
+    
+    // Advanced password validation
+    if (passwordStrength.score < 3) {
+      setError("Please choose a stronger password. " + passwordStrength.feedback);
+      setStatus("");
       setIsLoading(false);
       return;
     }
 
     try {
-      // This is a placeholder - implement actual signup functionality
-      // For now, just simulate a successful registration
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Call our signup API endpoint
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+        }),
+      });
+
+      const data = await response.json();
       
-      // Redirect to login page after successful signup
-      router.push("/direct-login?registered=true");
-    } catch (error) {
-      setError("Registration failed. Please try again.");
+      if (!response.ok) {
+        let errorMessage = data.error || "Registration failed";
+        
+        // Handle specific error cases
+        if (response.status === 409) {
+          errorMessage = "This email is already registered. Please log in instead.";
+        } else if (data.details) {
+          // Format Zod validation errors
+          const formattedErrors = Object.entries(data.details)
+            .map(([field, errors]: [string, any]) => {
+              if (errors && errors._errors) {
+                return `${field}: ${errors._errors.join(", ")}`;
+              }
+              return null;
+            })
+            .filter(Boolean)
+            .join("; ");
+          
+          if (formattedErrors) {
+            errorMessage = formattedErrors;
+          }
+        }
+        
+        setError(errorMessage);
+        setStatus("");
+      } else {
+        // Success - redirect to login page with success message
+        setStatus("Account created successfully! Redirecting to login...");
+        
+        // Redirect after a short delay to allow the user to see the success message
+        setTimeout(() => {
+          router.push(`${callbackUrl}?registered=true&email=${encodeURIComponent(email)}`);
+        }, 1500);
+      }
+    } catch (error: any) {
+      console.error("Signup error:", error);
+      setError("Network error. Please check your connection and try again.");
+      setStatus("");
     } finally {
       setIsLoading(false);
     }
@@ -47,6 +125,12 @@ export default function SignupPage() {
         {error && (
           <div className="mb-4 p-3 bg-red-500 text-white rounded">
             {error}
+          </div>
+        )}
+        
+        {status && (
+          <div className="mb-4 p-3 bg-green-500 text-white rounded">
+            {status}
           </div>
         )}
         
@@ -74,25 +158,84 @@ export default function SignupPage() {
           </div>
           
           <div>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="block w-full rounded-md bg-gray-700 border-gray-600 text-white p-4"
-              placeholder="Password"
-              required
-            />
+            <div className="relative">
+              <input
+                type={passwordVisible ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="block w-full rounded-md bg-gray-700 border-gray-600 text-white p-4"
+                placeholder="Password (min 8 characters)"
+                required
+                minLength={8}
+              />
+              <button
+                type="button"
+                onClick={() => setPasswordVisible(!passwordVisible)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                aria-label={passwordVisible ? "Hide password" : "Show password"}
+              >
+                {passwordVisible ? "🔒" : "👁️"}
+              </button>
+            </div>
+            
+            {password && (
+              <div className="mt-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-gray-400">Password strength:</span>
+                  <span className="text-xs font-medium" style={{ 
+                    color: passwordStrength.score < 2 ? 'red' : 
+                           passwordStrength.score < 4 ? 'yellow' : 'green' 
+                  }}>
+                    {passwordStrength.feedback}
+                  </span>
+                </div>
+                <div className="h-1 w-full bg-gray-600 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full rounded-full" 
+                    style={{ 
+                      width: `${(passwordStrength.score / 6) * 100}%`,
+                      backgroundColor: passwordStrength.score < 2 ? 'red' : 
+                                     passwordStrength.score < 4 ? 'yellow' : 'green'
+                    }}
+                  />
+                </div>
+                <ul className="mt-1 text-xs text-gray-400 space-y-1">
+                  <li className={password.length >= 8 ? "text-green-400" : ""}>
+                    ✓ At least 8 characters
+                  </li>
+                  <li className={/[A-Z]/.test(password) ? "text-green-400" : ""}>
+                    ✓ At least one uppercase letter
+                  </li>
+                  <li className={/[a-z]/.test(password) ? "text-green-400" : ""}>
+                    ✓ At least one lowercase letter
+                  </li>
+                  <li className={/[0-9]/.test(password) ? "text-green-400" : ""}>
+                    ✓ At least one number
+                  </li>
+                </ul>
+              </div>
+            )}
           </div>
           
-          <div>
+          <div className="relative">
             <input
-              type="password"
+              type={passwordVisible ? "text" : "password"}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="block w-full rounded-md bg-gray-700 border-gray-600 text-white p-4"
               placeholder="Confirm password"
               required
             />
+            
+            {password && confirmPassword && (
+              <div className="absolute right-0 top-1/2 transform -translate-y-1/2 mr-3">
+                {password === confirmPassword ? (
+                  <span className="text-green-400">✓</span>
+                ) : (
+                  <span className="text-red-400">✗</span>
+                )}
+              </div>
+            )}
           </div>
           
           <p className="text-sm text-gray-400">

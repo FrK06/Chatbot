@@ -15,12 +15,23 @@ export default function ForgotPasswordPage() {
     setError("");
 
     try {
-      // This is a placeholder - implement actual password reset functionality
-      // For now, just simulate a successful submission
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Something went wrong");
+      }
+
+      // Always show success even if email doesn't exist (prevents email enumeration)
       setIsSubmitted(true);
-    } catch (error) {
-      setError("An error occurred. Please try again.");
+    } catch (error: any) {
+      setError(error.message || "An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -44,6 +55,7 @@ export default function ForgotPasswordPage() {
             </div>
             <p className="text-gray-300 mb-4">
               Please check your inbox and follow the instructions to reset your password.
+              If you don't receive an email within a few minutes, please check your spam folder.
             </p>
             <Link 
               href="/direct-login" 

@@ -7,8 +7,11 @@ const publicPaths = [
   "/login",
   "/direct-login",
   "/forgot-password",
+  "/reset-password",
   "/signup",
   "/api/direct-auth",
+  "/api/auth/signup",
+  "/api/auth/reset-password",
   // NextAuth paths - IMPORTANT: ensure all of these are included
   "/api/auth",
   "/api/auth/signin",
