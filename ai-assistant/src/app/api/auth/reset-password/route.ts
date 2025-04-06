@@ -4,17 +4,7 @@ import { prisma } from "@/lib/db";
 import { randomBytes } from "crypto";
 import { passwordResetRequestSchema, passwordResetConfirmSchema } from "@/lib/validation";
 import { hash } from "bcrypt";
-
-// In a production environment, you would send an actual email
-async function sendPasswordResetEmail(email: string, token: string) {
-  // This is a placeholder for email sending
-  // In a real application, you would connect to an email service like SendGrid, AWS SES, etc.
-  console.log(`Password reset token for ${email}: ${token}`);
-  
-  // In development, we'll just log the token to the console
-  // In production, return true only if email was actually sent
-  return true;
-}
+import { sendPasswordResetEmail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,10 +30,8 @@ export async function POST(request: NextRequest) {
       // Find the user with this reset token
       const user = await prisma.user.findFirst({
         where: {
-          // In a real implementation, you would store resetToken and resetTokenExpiry in your User model
-          // This is a simplified example
-          // resetToken: token,
-          // resetTokenExpiry: { gt: new Date() }
+          resetToken: token,
+          resetTokenExpiry: { gt: new Date() } // Token must not be expired
         }
       });
       
@@ -62,8 +50,8 @@ export async function POST(request: NextRequest) {
         where: { id: user.id },
         data: {
           password: hashedPassword,
-          // resetToken: null,
-          // resetTokenExpiry: null
+          resetToken: null,
+          resetTokenExpiry: null
         }
       });
       
@@ -97,18 +85,23 @@ export async function POST(request: NextRequest) {
       const token = randomBytes(32).toString("hex");
       const tokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
       
-      // In a real implementation, you would store the token and expiry in the database
-      // This is a simplified example
-      // await prisma.user.update({
-      //   where: { id: user.id },
-      //   data: {
-      //     resetToken: token,
-      //     resetTokenExpiry: tokenExpiry
-      //   }
-      // });
+      // Store the token and expiry in the database
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          resetToken: token,
+          resetTokenExpiry: tokenExpiry
+        }
+      });
       
       // Send the password reset email
-      await sendPasswordResetEmail(email, token);
+      const emailSent = await sendPasswordResetEmail(email, token);
+      
+      if (!emailSent) {
+        console.error(`Failed to send password reset email to ${email}`);
+        // Don't expose email sending failure to the user
+        // Just log it on the server
+      }
       
       return NextResponse.json({ success: true });
     }

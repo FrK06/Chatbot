@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { hash } from "bcrypt";
 import { signupSchema, formatZodErrors } from "@/lib/validation";
+import { sendWelcomeEmail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,6 +45,14 @@ export async function POST(request: NextRequest) {
         tier: "FREE", // Default tier for new users
       },
     });
+    
+    // Send welcome email
+    try {
+      await sendWelcomeEmail(user.email, user.name || '');
+    } catch (emailError) {
+      // Log but don't expose email sending failure to the user
+      console.error('Failed to send welcome email:', emailError);
+    }
     
     // Return success with safe user data (no password)
     return NextResponse.json(
