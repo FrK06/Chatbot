@@ -1,7 +1,7 @@
 // src/app/chat/page.tsx
 import { getCurrentUser } from "@/lib/auth-utils";
 import { redirect } from "next/navigation";
-import ChatInterfaceDirect from "./ChatInterfaceDirect";
+import EnhancedChatInterface from "./ChatInterfaceDirect";
 
 export default async function ChatPage() {
   const user = await getCurrentUser();
@@ -11,6 +11,5 @@ export default async function ChatPage() {
     redirect("/direct-login?callbackUrl=/chat");
   }
 
-  // Render the client component chat interface
-  return <ChatInterfaceDirect user={user} />;
+  return <EnhancedChatInterface user={user} />;
 }
