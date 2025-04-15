@@ -1,4 +1,4 @@
-// src/app/chat/ChatWithFileUpload.tsx
+// src/app/chat/ChatInterfaceDirect.tsx
 
 "use client";
 import React, { useState, useEffect, useRef, FormEvent } from "react";
