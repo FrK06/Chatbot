@@ -16,6 +16,8 @@ model User {
   tier              String         @default("FREE")
   stripeCustomerId  String?       
   emailVerified     DateTime?
+  resetToken        String?        // Password reset token
+  resetTokenExpiry  DateTime?      // When the reset token expires
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   conversations     Conversation[]
